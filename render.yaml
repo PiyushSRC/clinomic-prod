@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: clinomic-backend
+    env: docker
+    rootDir: backend
+    dockerfilePath: Dockerfile
+    plan: free
+    healthCheckPath: /api/health/live
+    envVars:
+      - key: APP_ENV
+        value: prod
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: MASTER_ENCRYPTION_KEY
+        generateValue: true
+      - key: AUDIT_SIGNING_KEY
+        generateValue: true
+      - key: MONGO_URL
+        value: PLACEHOLDER
+
+  - type: web
+    name: clinomic-frontend
+    env: docker
+    rootDir: frontend
+    dockerfilePath: Dockerfile
+    plan: free
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          name: clinomic-backend
+          type: web
+          property: hostport

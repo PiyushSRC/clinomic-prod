@@ -1,0 +1,82 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: clinomic-mongodb-prod
+    restart: always
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    environment:
+      MONGO_INITDB_DATABASE: clinomic
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: StrongPassword123
+    networks:
+      - clinomic-internal
+    healthcheck:
+      test: [ "CMD-SHELL", "mongosh --quiet -u admin -p StrongPassword123 --authenticationDatabase admin --eval 'db.runCommand({ ping: 1 }).ok'" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: clinomic-backend-prod
+    restart: always
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    command: [ "uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8001" ]
+    environment:
+      APP_ENV: prod
+      MONGO_URL: mongodb://admin:StrongPassword123@mongodb:27017/clinomic?authSource=admin
+      DB_NAME: clinomic
+      CORS_ORIGINS: http://localhost:3000
+      JWT_SECRET_KEY: C4bmTyE9AxCgf1sf4GO_tUMQPFfsFDCvoz4fhO5OwpcFz9S-p5kfuak_mDbUe3EEpJxr_4g_B8cGrex5BfLeTQ
+      MASTER_ENCRYPTION_KEY: 6QT8lOfnBqbMR8NxUQJHjUxn0nXZBUQq-R3l9XBMjOo=
+      AUDIT_SIGNING_KEY: e805759e667d62fef27987ba5330513ba6d52dcba10b054d4aae0d2e86e64a473b6cfd83f47bd04f511df158921d1e38117741c38935f40eca70323314f2c4f
+      DEMO_MODE_ENABLED: "true"
+      DEMO_USERS_ENABLED: "true"
+    ports:
+      - "0.0.0.0:8001:8001"
+    networks:
+      - clinomic-internal
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8001/api/health/ready || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_BACKEND_URL: http://localhost:8001
+    container_name: clinomic-frontend-prod
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "0.0.0.0:3000:3000"
+    networks:
+      - clinomic-internal
+      - clinomic-external
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  mongodb_data:
+
+
+networks:
+  clinomic-internal:
+    driver: bridge
+  clinomic-external:
+    driver: bridge
