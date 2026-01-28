@@ -26,13 +26,14 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  BACKEND_IMAGE: ghcr.io/${{ github.repository }}/backend
-  FRONTEND_IMAGE: ghcr.io/${{ github.repository }}/frontend
+  BACKEND_IMAGE: ghcr.io/dev-abiox/production-ready/backend
+  FRONTEND_IMAGE: ghcr.io/dev-abiox/production-ready/frontend
   VPS_HOST: 66.116.225.67
   VPS_USER: deploy
   DEPLOY_PATH: /opt/clinomic
   HEALTH_URL: https://clinomiclabs.com/api/health/ready
   DOMAIN: clinomiclabs.com
+
 
 jobs:
   # ==========================================================================
