@@ -76,7 +76,7 @@ services:
   # Backend - FastAPI + ML Models
   # ==========================================================================
   backend:
-    image: clinomic-backend:latest
+    image: ghcr.io/dev-abiox/production-ready/backend:latest
     container_name: clinomic-backend
     restart: unless-stopped
     
@@ -141,7 +141,7 @@ services:
   # Frontend - React Application
   # ==========================================================================
   frontend:
-    image: clinomic-frontend:latest
+    image: ghcr.io/dev-abiox/production-ready/frontend:latest
     container_name: clinomic-frontend
     restart: unless-stopped
     
@@ -193,7 +193,6 @@ services:
     
     volumes:
       - ./nginx/clinomic.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/www/certbot:/var/www/certbot:ro
       - nginx_certs:/etc/nginx/certs
