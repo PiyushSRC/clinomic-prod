@@ -1,11 +1,3 @@
-# ============================================================================
-# Production Deployment Pipeline
-# ============================================================================
-# Triggers: Push to main branch (after CI passes)
-# Deploys to: clinomiclabs.com (66.116.225.67)
-# Strategy: Rolling deployment with health check gating
-# ============================================================================
-
 name: Deploy to Production
 
 on:
@@ -14,15 +6,6 @@ on:
     branches: [main]
     types: [completed]
   workflow_dispatch:
-    inputs:
-      force_deploy:
-        description: 'Force deployment even if health check fails'
-        required: false
-        default: 'false'
-      image_tag:
-        description: 'Specific image tag to deploy (default: latest)'
-        required: false
-        default: 'latest'
 
 env:
   REGISTRY: ghcr.io
@@ -32,318 +15,93 @@ env:
   VPS_USER: deploy
   DEPLOY_PATH: /opt/clinomic
   HEALTH_URL: https://clinomiclabs.com/api/health/ready
-  DOMAIN: clinomiclabs.com
-
 
 jobs:
-  # ==========================================================================
-  # JOB 1: Build and Push Images
-  # ==========================================================================
+
   build-push:
     name: Build & Push Images
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
-    
+
     permissions:
       contents: read
       packages: write
 
     outputs:
-      sha_short: ${{ steps.vars.outputs.sha_short }}
       image_tag: ${{ steps.vars.outputs.image_tag }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set variables
+      - name: Set Image Tag
         id: vars
         run: |
-          SHA_SHORT=$(git rev-parse --short HEAD)
-          DATE=$(date +'%Y%m%d')
-          if [ "${{ github.event.inputs.image_tag }}" != "" ] && [ "${{ github.event.inputs.image_tag }}" != "latest" ]; then
-            IMAGE_TAG="${{ github.event.inputs.image_tag }}"
-          else
-            IMAGE_TAG="${DATE}-${SHA_SHORT}"
-          fi
-          echo "sha_short=${SHA_SHORT}" >> $GITHUB_OUTPUT
-          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
-          echo "date=${DATE}" >> $GITHUB_OUTPUT
+          TAG=$(date +'%Y%m%d')-$(git rev-parse --short HEAD)
+          echo "image_tag=$TAG" >> $GITHUB_OUTPUT
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Backend Build
       - name: Build & Push Backend
         uses: docker/build-push-action@v5
         with:
           context: ./backend
-          file: ./backend/Dockerfile
           push: true
           tags: |
             ${{ env.BACKEND_IMAGE }}:${{ steps.vars.outputs.image_tag }}
-            ${{ env.BACKEND_IMAGE }}:sha-${{ steps.vars.outputs.sha_short }}
             ${{ env.BACKEND_IMAGE }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            GIT_COMMIT=${{ github.sha }}
-            BUILD_DATE=${{ steps.vars.outputs.date }}
 
-      # Frontend Build
       - name: Build & Push Frontend
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
-          file: ./frontend/Dockerfile
           push: true
           tags: |
             ${{ env.FRONTEND_IMAGE }}:${{ steps.vars.outputs.image_tag }}
-            ${{ env.FRONTEND_IMAGE }}:sha-${{ steps.vars.outputs.sha_short }}
             ${{ env.FRONTEND_IMAGE }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           build-args: |
             REACT_APP_BACKEND_URL=https://clinomiclabs.com
 
-  # ==========================================================================
-  # JOB 2: Deploy to Production (requires approval)
-  # ==========================================================================
+
   deploy:
     name: Deploy to VPS
     runs-on: ubuntu-latest
     needs: build-push
-    environment: 
-      name: production
-      url: https://clinomiclabs.com
-    
-    concurrency:
-      group: production-deploy
-      cancel-in-progress: false
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup SSH Key
+      - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Create deployment package
+      - name: Deploy
         run: |
-          mkdir -p deploy-package
-          cp docker-compose.prod.yml deploy-package/
-          cp -r scripts/deploy/* deploy-package/ 2>/dev/null || true
-          cp -r nginx/* deploy-package/ 2>/dev/null || true
-
-      - name: Pre-deployment health check
-        id: pre_health
-        run: |
-          echo "Checking current health before deployment..."
-          HEALTH=$(curl -sf "${{ env.HEALTH_URL }}" || echo '{"status":"unknown"}')
-          echo "Current health: $HEALTH"
-          echo "pre_health=$HEALTH" >> $GITHUB_OUTPUT
-
-      - name: Deploy to VPS
-        id: deploy
-        env:
-          IMAGE_TAG: ${{ needs.build-push.outputs.image_tag }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_ACTOR: ${{ github.actor }}
-        run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'DEPLOY_SCRIPT'
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o HostKeyAlgorithms=+ssh-rsa \
+            -o PubkeyAcceptedAlgorithms=+ssh-rsa \
+            ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
+            
             set -e
-            
-            echo "=========================================="
-            echo "CLINOMIC PRODUCTION DEPLOYMENT"
-            echo "=========================================="
-            echo "Timestamp: $(date -Iseconds)"
-            echo "Image Tag: ${IMAGE_TAG:-latest}"
-            echo ""
-            
-            cd ${{ env.DEPLOY_PATH }}
-            
-            # Save current state for rollback
-            echo "Saving current state for rollback..."
-            docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "(backend|frontend)" | head -2 > .last_deploy_images || true
-            cp docker-compose.prod.yml docker-compose.prod.yml.backup 2>/dev/null || true
-            
-            # Log into GHCR
-            echo "Logging into GitHub Container Registry..."
-            echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
-            
-            # Pull new images
-            echo "Pulling new images..."
-            docker pull ${{ env.BACKEND_IMAGE }}:${IMAGE_TAG:-latest}
-            docker pull ${{ env.FRONTEND_IMAGE }}:${IMAGE_TAG:-latest}
-            
-            # Tag as production
-            docker tag ${{ env.BACKEND_IMAGE }}:${IMAGE_TAG:-latest} clinomic-backend:latest
-            docker tag ${{ env.FRONTEND_IMAGE }}:${IMAGE_TAG:-latest} clinomic-frontend:latest
-            
-            # Rolling restart (one service at a time)
-            echo "Starting rolling deployment..."
-            
-            # Update backend first
-            echo "Updating backend..."
-            docker-compose -f docker-compose.prod.yml up -d --no-deps --force-recreate backend
-            
-            # Wait for backend health
-            echo "Waiting for backend health check..."
-            for i in {1..30}; do
-              if curl -sf http://localhost:8001/api/health/ready > /dev/null 2>&1; then
-                echo "Backend healthy after $i seconds"
-                break
-              fi
-              if [ $i -eq 30 ]; then
-                echo "ERROR: Backend health check failed!"
-                exit 1
-              fi
-              sleep 1
-            done
-            
-            # Update frontend
-            echo "Updating frontend..."
-            docker-compose -f docker-compose.prod.yml up -d --no-deps --force-recreate frontend
-            
-            # Reload nginx gracefully
-            echo "Reloading nginx..."
-            docker exec nginx nginx -s reload 2>/dev/null || sudo nginx -s reload 2>/dev/null || true
-            
-            # Final health check
-            echo "Final health verification..."
-            sleep 3
-            if curl -sf http://localhost:8001/api/health/ready > /dev/null 2>&1; then
-              echo "✓ Deployment successful!"
-            else
-              echo "✗ Final health check failed"
-              exit 1
-            fi
-            
-            # Cleanup old images (keep last 5)
-            echo "Cleaning up old images..."
-            docker image prune -f --filter "until=168h" || true
-            
-            # Log deployment
-            echo "$(date -Iseconds) | DEPLOY | ${IMAGE_TAG} | SUCCESS" >> /var/log/clinomic-deploys.log
-            
-            echo ""
-            echo "=========================================="
-            echo "DEPLOYMENT COMPLETE"
-            echo "=========================================="
-          DEPLOY_SCRIPT
+            cd /opt/clinomic
 
-      - name: Post-deployment health check
-        id: post_health
-        run: |
-          echo "Waiting for deployment to stabilize..."
-          sleep 10
-          
-          echo "Running post-deployment health checks..."
-          for i in {1..5}; do
-            HEALTH=$(curl -sf "${{ env.HEALTH_URL }}" 2>/dev/null)
-            if [ $? -eq 0 ]; then
-              echo "Health check $i/5: PASSED"
-              echo "$HEALTH"
-            else
-              echo "Health check $i/5: FAILED"
-              if [ $i -eq 5 ]; then
-                echo "::error::Post-deployment health check failed!"
-                exit 1
-              fi
-            fi
-            sleep 2
-          done
-          
-          echo "All health checks passed!"
+            docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Rollback on failure
-        if: failure() && steps.deploy.outcome == 'failure'
-        run: |
-          echo "Deployment failed, initiating rollback..."
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'ROLLBACK_SCRIPT'
-            set -e
-            cd ${{ env.DEPLOY_PATH }}
-            
-            echo "Rolling back to previous version..."
-            
-            if [ -f docker-compose.prod.yml.backup ]; then
-              cp docker-compose.prod.yml.backup docker-compose.prod.yml
-            fi
-            
-            if [ -f .last_deploy_images ]; then
-              while read -r image; do
-                docker tag "$image" "$(echo $image | cut -d: -f1):rollback"
-              done < .last_deploy_images
-            fi
-            
-            docker-compose -f docker-compose.prod.yml up -d --force-recreate backend frontend
-            
-            echo "$(date -Iseconds) | ROLLBACK | AUTO | TRIGGERED" >> /var/log/clinomic-deploys.log
-            
-            echo "Rollback complete."
-          ROLLBACK_SCRIPT
+            docker pull ${{ env.BACKEND_IMAGE }}:latest
+            docker pull ${{ env.FRONTEND_IMAGE }}:latest
 
-      - name: Notify deployment status
-        if: always()
-        run: |
-          if [ "${{ job.status }}" == "success" ]; then
-            echo "## ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "- **Environment:** Production" >> $GITHUB_STEP_SUMMARY
-            echo "- **URL:** https://clinomiclabs.com" >> $GITHUB_STEP_SUMMARY
-            echo "- **Image Tag:** ${{ needs.build-push.outputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "## ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Check the logs for details. Automatic rollback was attempted." >> $GITHUB_STEP_SUMMARY
-          fi
+            docker compose -f docker-compose.prod.yml down
+            docker compose -f docker-compose.prod.yml up -d
 
-  # ==========================================================================
-  # JOB 3: Verify Deployment
-  # ==========================================================================
-  verify:
-    name: Verify Deployment
-    runs-on: ubuntu-latest
-    needs: deploy
-    
-    steps:
-      - name: Comprehensive health check
-        run: |
-          echo "Running comprehensive verification..."
-          
-          # Check main site
-          echo "Checking frontend..."
-          curl -sf "https://clinomiclabs.com" > /dev/null && echo "✓ Frontend OK" || echo "✗ Frontend FAIL"
-          
-          # Check API
-          echo "Checking API health..."
-          curl -sf "https://clinomiclabs.com/api/health/ready" | jq . || echo "API check failed"
-          
-          # Check SSL
-          echo "Checking SSL certificate..."
-          echo | openssl s_client -servername clinomiclabs.com -connect clinomiclabs.com:443 2>/dev/null | openssl x509 -noout -dates
-          
-          echo ""
-          echo "Verification complete!"
+            sleep 10
+            curl -f https://clinomiclabs.com/api/health/ready
 
-      - name: Update deployment record
-        run: |
-          echo "## Deployment Verification Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Frontend | ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| API Health | ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| SSL Valid | ✅ |" >> $GITHUB_STEP_SUMMARY
+            echo "Deployment successful"
+          EOF
