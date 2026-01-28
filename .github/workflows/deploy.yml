@@ -39,16 +39,14 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: |
-            ghcr.io/dev-abiox/production-ready/backend:latest
+          tags: ghcr.io/dev-abiox/production-ready/backend:latest
 
       - name: Build & Push Frontend
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
           push: true
-          tags: |
-            ghcr.io/dev-abiox/production-ready/frontend:latest
+          tags: ghcr.io/dev-abiox/production-ready/frontend:latest
           build-args: |
             REACT_APP_BACKEND_URL=https://clinomiclabs.com
 
@@ -62,13 +60,17 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -t rsa ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
 
       - name: Deploy to VPS
         run: |
-          ssh -i ~/.ssh/deploy_key ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
+          ssh \
+            -o HostKeyAlgorithms=+ssh-rsa \
+            -o PubkeyAcceptedAlgorithms=+ssh-rsa \
+            -i ~/.ssh/deploy_key \
+            ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
+          
           set -e
-
           cd /opt/clinomic
 
           echo "Logging into GHCR..."
