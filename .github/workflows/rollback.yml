@@ -52,6 +52,8 @@ jobs:
             User ${{ env.VPS_USER }}
             IdentityFile ~/.ssh/deploy_key
             StrictHostKeyChecking accept-new
+            HostKeyAlgorithms +ssh-rsa
+            PubkeyAcceptedAlgorithms +ssh-rsa
           EOF
           chmod 600 ~/.ssh/config
 
