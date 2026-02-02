@@ -62,7 +62,7 @@ db.audit_logs_v2.createIndex({ 'orgId': 1, 'sequence': 1 }, { unique: true });
 db.audit_logs_v2.createIndex({ 'orgId': 1, 'timestamp': -1 });
 db.audit_checkpoints.createIndex({ 'orgId': 1, 'upToSequence': 1 });
 db.refresh_tokens.createIndex({ 'orgId': 1, 'userId': 1, 'tokenHash': 1 }, { unique: true });
-db.refresh_tokens.createIndex({ 'expiresAt': 1 }, { expireAfterSeconds: 0 });
+
 db.mfa_settings.createIndex({ 'userId': 1, 'orgId': 1 }, { unique: true });
 db.user_devices.createIndex({ 'userId': 1, 'orgId': 1, 'fingerprintHash': 1 });
 db.login_anomalies.createIndex({ 'userId': 1, 'timestamp': -1 });

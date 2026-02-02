@@ -15,11 +15,10 @@ import { Role } from "@/types";
 const NavItem = ({ icon: Icon, label, active, onClick, badge }) => (
   <button
     onClick={onClick}
-    className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-      active
+    className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${active
         ? "bg-teal-50 text-teal-700 border border-teal-100"
         : "text-slate-600 hover:bg-slate-50 hover:text-slate-800"
-    }`}
+      }`}
   >
     <Icon className={`h-5 w-5 ${active ? "text-teal-600" : "text-slate-400"}`} />
     <span className="flex-1 text-left">{label}</span>
@@ -47,9 +46,7 @@ const Layout = ({ user, onLogout, activeView, onChangeView, children }) => {
         {/* Logo */}
         <div className="p-4 border-b border-slate-200">
           <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 bg-teal-600 rounded-lg flex items-center justify-center shadow-sm">
-              <FlaskConical className="h-6 w-6 text-white" />
-            </div>
+            <img src="/logo.png" alt="Clinomic Logo" className="h-10 w-10 object-contain" />
             <div>
               <h1 className="font-bold text-slate-800 text-lg">Clinomic</h1>
               <p className="text-xs text-slate-500">B12 Screening Platform</p>
@@ -68,13 +65,12 @@ const Layout = ({ user, onLogout, activeView, onChangeView, children }) => {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-slate-800 truncate">{user.name || user.id}</p>
               <span
-                className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
-                  isAdmin
+                className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${isAdmin
                     ? "bg-purple-100 text-purple-700"
                     : isDoctor
-                    ? "bg-blue-100 text-blue-700"
-                    : "bg-teal-100 text-teal-700"
-                }`}
+                      ? "bg-blue-100 text-blue-700"
+                      : "bg-teal-100 text-teal-700"
+                  }`}
               >
                 {user.role}
               </span>
@@ -152,7 +148,7 @@ const Layout = ({ user, onLogout, activeView, onChangeView, children }) => {
               />
             </>
           )}
-          
+
           <div className="pt-4 mt-4 border-t border-slate-200">
             <NavItem
               icon={Settings}
@@ -172,7 +168,7 @@ const Layout = ({ user, onLogout, activeView, onChangeView, children }) => {
             <LogOut className="h-4 w-4" />
             <span>Sign Out</span>
           </button>
-          
+
           <div className="mt-3 text-center">
             <p className="text-xs text-slate-400">v2.0 • Milestone 4</p>
             <div className="flex items-center justify-center space-x-1 mt-1">

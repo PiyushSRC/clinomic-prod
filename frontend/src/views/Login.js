@@ -7,7 +7,7 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
   const [password, setPassword] = useState("");
   const [view, setView] = useState("login"); // login, forgot_password, mfa_challenge
   const [resetStatus, setResetStatus] = useState("idle");
-  
+
   // MFA state
   const [mfaCode, setMfaCode] = useState("");
   const [mfaPendingToken, setMfaPendingToken] = useState(null);
@@ -18,10 +18,10 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMfaError(null);
-    
+
     try {
       const result = await onLogin(username, password);
-      
+
       // Check if MFA is required
       if (result && result.mfaRequired) {
         setMfaPendingToken(result.mfaPendingToken);
@@ -37,7 +37,7 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
     e.preventDefault();
     setMfaLoading(true);
     setMfaError(null);
-    
+
     try {
       const user = await AuthService.verifyMFA(mfaPendingToken, mfaCode);
       // Call parent's success handler
@@ -92,7 +92,7 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
               <Smartphone className="h-5 w-5" />
               <span className="text-sm">Enter the code from your authenticator app</span>
             </div>
-            
+
             <form className="space-y-6" onSubmit={handleMFASubmit}>
               <div>
                 <label htmlFor="mfa-code" className="block text-sm font-medium text-slate-700 text-center mb-2">
@@ -169,9 +169,7 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
     <div data-testid="login-page" className="min-h-screen bg-slate-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="h-16 w-16 bg-teal-600 rounded-xl flex items-center justify-center shadow-lg transform rotate-3">
-            <FlaskConical className="h-10 w-10 text-white" />
-          </div>
+          <img src="/logo.png" alt="Clinomic Labs Logo" className="h-20 w-auto" />
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-slate-900 tracking-tight">Clinomic Labs</h2>
         <p className="mt-2 text-center text-sm text-slate-600">Pathology LIS & B12 Screening System</p>
@@ -358,7 +356,7 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
             </div>
           </div>
         </div>
-        
+
         <div className="mt-4 text-center text-xs text-slate-400">
           <p>Clinomic B12 Screening Platform v2.0</p>
           <p className="mt-1">HIPAA Compliant • FDA 21 CFR Part 11 Ready</p>

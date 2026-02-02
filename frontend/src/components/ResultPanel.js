@@ -6,14 +6,37 @@ import autoTable from "jspdf-autotable";
 import { ScreeningLabel } from "../types";
 
 const ResultPanel = ({ result, patient, cbcRows }) => {
-  const generateDoc = () => {
+  const loadImage = (url) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = url;
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+    });
+  };
+
+  const generateDoc = async () => {
     const doc = new jsPDF();
 
     doc.setFillColor(13, 148, 136);
     doc.rect(0, 0, 210, 20, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
-    doc.text("Clinomic Labs", 14, 13);
+
+    // Add Logo
+    try {
+      const logo = await loadImage("/logo.png");
+      doc.addImage(logo, "PNG", 10, 2, 16, 16);
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(16);
+      doc.text("Clinomic Labs", 30, 13); // Shifted right
+    } catch (e) {
+      console.error("Could not load logo", e);
+      // Fallback if logo fails
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(16);
+      doc.text("Clinomic Labs", 14, 13);
+    }
+
     doc.setFontSize(10);
     doc.text("Vitamin B12 Screening Report", 195, 13, { align: "right" });
 
@@ -122,13 +145,13 @@ const ResultPanel = ({ result, patient, cbcRows }) => {
     return doc;
   };
 
-  const handleDownloadPDF = () => {
-    const doc = generateDoc();
+  const handleDownloadPDF = async () => {
+    const doc = await generateDoc();
     doc.save(`ClinomicLabs_Report_${patient.id}.pdf`);
   };
 
-  const handlePrint = () => {
-    const doc = generateDoc();
+  const handlePrint = async () => {
+    const doc = await generateDoc();
     doc.autoPrint();
     const blob = doc.output("blob");
     const url = URL.createObjectURL(blob);
