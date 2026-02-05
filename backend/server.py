@@ -1917,11 +1917,36 @@ async def revoke_consent(
 
 @api_router.post("/admin/demo/seed")
 async def seed_demo_data(
+    force: bool = False,
     user: TokenData = Depends(require_role(["ADMIN"])),
 ):
-    """Seed demo data for investor demonstrations."""
+    """Seed demo data for investor demonstrations.
+
+    Args:
+        force: If True, reseed even if data exists. If False (default), skip if already seeded.
+    """
+    # Block in production unless explicitly forced
+    if settings.is_production() and not force:
+        raise HTTPException(
+            status_code=400,
+            detail="Demo seeding blocked in production. Use force=true to override."
+        )
+
     tenant = user.tenant()
     org_id = tenant.org_id
+
+    # Check if already seeded
+    existing_demo = await db.screenings.count_documents({
+        "orgId": org_id,
+        "patientId": {"$regex": "^PAT-DEMO-"}
+    })
+    if existing_demo > 0 and not force:
+        return {
+            "status": "skipped",
+            "message": "Demo data already exists. Use force=true to reseed.",
+            "existing_screenings": existing_demo,
+        }
+
     now = utcnow()
 
     seeded = {
@@ -2003,9 +2028,10 @@ async def seed_demo_data(
         )
         seeded["patients"] += 1
 
-        # Create screening
+        # Create screening with deterministic ID to prevent duplicates
         risk_class, label_text, probs = random.choice(risk_classes)
-        screening_id = str(uuid.uuid4())
+        # Use deterministic ID based on patient ID for idempotency
+        screening_id = f"DEMO-SCR-{patient['id']}"
 
         cbc_values = {
             "mcv": round(random.uniform(75, 105), 1),
@@ -2038,7 +2064,12 @@ async def seed_demo_data(
             "createdAt": (now - timedelta(days=random.randint(0, 30))).isoformat(),
         }
 
-        await db.screenings.insert_one(screening_doc)
+        # Use upsert to prevent duplicates
+        await db.screenings.update_one(
+            {"id": screening_id, "orgId": org_id},
+            {"$set": screening_doc},
+            upsert=True
+        )
         seeded["screenings"] += 1
 
     # Log seed action
