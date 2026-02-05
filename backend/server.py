@@ -6,7 +6,9 @@ import json
 import logging
 import os
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional
 
@@ -87,6 +89,10 @@ immutable_audit = ImmutableAuditLogger(db)  # New immutable audit system
 storage = ObjectStorage(db)
 job_manager = JobManager(db)
 mfa_manager = MFAManager(db)
+
+# Thread pool for CPU-bound operations (ML inference, hashing)
+# This prevents blocking the async event loop
+ml_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ml_worker")
 
 app = FastAPI(
     title="Clinomic B12 Screening Platform",
@@ -614,21 +620,57 @@ async def me(user: TokenData = Depends(get_current_user)):
 # ------------------------------------------------------------
 
 
+class MLModelLoadError(Exception):
+    """Raised when ML models fail to load."""
+    pass
+
+
+class MLModelNotReadyError(Exception):
+    """Raised when ML models are not ready for inference."""
+    pass
+
+
 class B12ClinicalEngine:
     def __init__(self, model_dir: Path):
         self.model_dir = model_dir
+        self.stage1 = None
+        self.stage2 = None
+        self.thresholds = None
+        self._ready = False
+        self._load_error = None
+
+        self._load_models()
+
+    def _load_models(self):
+        """Load ML models. Sets _ready=True on success, stores error on failure."""
         try:
-            self.stage1 = joblib.load(str(model_dir / "stage1_normal_vs_abnormal.pkl"))
-            self.stage2 = joblib.load(str(model_dir / "stage2_borderline_vs_deficient.pkl"))
+            self.stage1 = joblib.load(str(self.model_dir / "stage1_normal_vs_abnormal.pkl"))
+            self.stage2 = joblib.load(str(self.model_dir / "stage2_borderline_vs_deficient.pkl"))
+
+            with open(self.model_dir / "thresholds.json", "r", encoding="utf-8") as f:
+                self.thresholds = json.load(f)
+
+            self._ready = True
+            logger.info("ML models loaded successfully")
         except Exception as e:
-            logger.warning(f"Could not load ML models (likely missing catboost): {e}")
-            self.stage1 = None
-            self.stage2 = None
+            self._load_error = str(e)
+            self._ready = False
+            logger.error(f"CRITICAL: Failed to load ML models: {e}")
 
-        import json
+    @property
+    def is_ready(self) -> bool:
+        """Check if the ML engine is ready for predictions."""
+        return self._ready and self.stage1 is not None and self.stage2 is not None
 
-        with open(model_dir / "thresholds.json", "r", encoding="utf-8") as f:
-            self.thresholds = json.load(f)
+    def get_status(self) -> dict:
+        """Get ML engine status for health checks."""
+        return {
+            "ready": self.is_ready,
+            "stage1_loaded": self.stage1 is not None,
+            "stage2_loaded": self.stage2 is not None,
+            "thresholds_loaded": self.thresholds is not None,
+            "error": self._load_error,
+        }
 
     def add_indices(self, row: Dict[str, Any]) -> Dict[str, Any]:
         row = dict(row)
@@ -669,6 +711,12 @@ class B12ClinicalEngine:
         return score, rules
 
     def predict(self, cbc_dict: Dict[str, Any]) -> Dict[str, Any]:
+        # CRITICAL: Fail closed if models are not ready
+        if not self.is_ready:
+            raise MLModelNotReadyError(
+                f"ML models not ready for prediction. Status: {self.get_status()}"
+            )
+
         df = pd.DataFrame([cbc_dict])
 
         expected_cols = [
@@ -694,13 +742,8 @@ class B12ClinicalEngine:
         if df["Sex"].dtype == "object":
             df["Sex"] = df["Sex"].map({"M": 1, "F": 0, "m": 1, "f": 0}).fillna(0)
 
-        if self.stage1 is None or self.stage2 is None:
-             # Fallback for when models are not loaded
-             p_abnormal = 0.0
-             p_def = 0.0
-        else:
-             p_abnormal = float(self.stage1.predict_proba(df)[0][1])
-             p_def = float(self.stage2.predict_proba(df)[0][1]) if p_abnormal > 0.3 else 0.05
+        p_abnormal = float(self.stage1.predict_proba(df)[0][1])
+        p_def = float(self.stage2.predict_proba(df)[0][1]) if p_abnormal > 0.3 else 0.05
 
         row = self.add_indices(cbc_dict)
         rule_score, rules = self.apply_rules(row)
@@ -1000,11 +1043,13 @@ async def health_live():
 
 @api_router.get("/health/ready")
 async def health_ready():
+    # Check database connectivity
     try:
         await db.command("ping")
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"database not ready: {str(e)}")
 
+    # Check model files exist
     required = [
         ROOT_DIR / "b12_clinical_engine_v1.0" / "stage1_normal_vs_abnormal.pkl",
         ROOT_DIR / "b12_clinical_engine_v1.0" / "stage2_borderline_vs_deficient.pkl",
@@ -1015,7 +1060,15 @@ async def health_ready():
     if missing:
         raise HTTPException(status_code=503, detail=f"model artifacts missing: {', '.join(missing)}")
 
-    return {"status": "ready"}
+    # CRITICAL: Check ML models are actually loaded and ready
+    if not ENGINE.is_ready:
+        ml_status = ENGINE.get_status()
+        raise HTTPException(
+            status_code=503,
+            detail=f"ML engine not ready: {ml_status.get('error', 'unknown error')}"
+        )
+
+    return {"status": "ready", "ml_engine": ENGINE.get_status()}
 
 
 # ------------------------------------------------------------
@@ -1084,8 +1137,16 @@ async def predict_b12(
 
     cbc = data.cbc.model_dump(by_alias=False)
 
+    # Run ML prediction in thread pool to avoid blocking event loop
+    loop = asyncio.get_event_loop()
     try:
-        result = ENGINE.predict(cbc)
+        result = await loop.run_in_executor(ml_executor, ENGINE.predict, cbc)
+    except MLModelNotReadyError as e:
+        logger.error(f"ML model not ready for prediction: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="ML screening service unavailable. Models not loaded."
+        ) from e
     except Exception as e:
         logger.exception("Model prediction failed")
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}") from e
@@ -2003,6 +2064,7 @@ app.include_router(api_router)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+    ml_executor.shutdown(wait=True)
 
 
 if __name__ == "__main__":
