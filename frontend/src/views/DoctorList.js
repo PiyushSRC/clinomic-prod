@@ -51,7 +51,7 @@ const DoctorList = ({ onSelectDoctor, labId, labName, onBack }) => {
             <div
               key={doc.id}
               data-testid={`doctor-card-${doc.id}`}
-              onClick={() => onSelectDoctor(doc.id, doc.name)}
+              onClick={() => onSelectDoctor(doc.code, doc.name)}
               className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm hover:shadow-md hover:border-teal-300 cursor-pointer transition-all group relative overflow-hidden"
             >
               <div className="absolute top-0 left-0 w-1 h-full bg-slate-200 group-hover:bg-teal-500 transition-colors" />

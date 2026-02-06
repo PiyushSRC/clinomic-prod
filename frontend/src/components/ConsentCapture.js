@@ -20,20 +20,26 @@ const ConsentCapture = ({ patient, onConsentCaptured, onCancel }) => {
     setError(null);
     
     try {
+      // Build consent text from the form data
+      const consentTextParts = [
+        `Patient ${patient.name || patient.id} has provided ${consentType} consent for B12 deficiency screening.`,
+        `Consent obtained on ${new Date().toLocaleString()}.`,
+        `Purpose: CBC data analysis for B12 deficiency screening, storage of results, and quality improvement.`,
+      ];
+      if (witnessName && consentType !== "electronic") {
+        consentTextParts.push(`Witnessed by: ${witnessName}`);
+      }
+      if (notes) {
+        consentTextParts.push(`Notes: ${notes}`);
+      }
+
       const consentData = {
         patientId: patient.id,
-        patientName: patient.name,
-        consentType,
-        witnessName: consentType !== "electronic" ? witnessName : null,
-        notes,
-        consentedAt: new Date().toISOString(),
-        purposes: [
-          "B12 deficiency screening using CBC data",
-          "Storage of screening results for medical records",
-          "Anonymous data usage for quality improvement"
-        ]
+        consentType: "screening", // Type of consent (screening, research, etc.)
+        consentMethod: consentType, // Method: verbal, written, electronic
+        consentText: consentTextParts.join(" "),
       };
-      
+
       await onConsentCaptured(consentData);
     } catch (err) {
       setError("Failed to record consent. Please try again.");

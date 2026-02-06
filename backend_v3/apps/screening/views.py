@@ -47,7 +47,7 @@ class PredictView(APIView):
     required_roles = [Role.LAB, Role.DOCTOR, Role.ADMIN]
     throttle_classes = [ScreeningRateThrottle]
 
-    async def post(self, request):
+    def post(self, request):
         serializer = ScreeningRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -62,9 +62,10 @@ class PredictView(APIView):
         # Get CBC data
         cbc = data['cbc']
 
-        # Run ML prediction (async, non-blocking)
+        # Run ML prediction (synchronous)
         try:
-            result = await predict_async(cbc)
+            engine = get_ml_engine()
+            result = engine.predict(cbc)
         except MLModelNotReadyError as e:
             logger.error(f"ML model not ready for prediction: {e}")
             return Response(
@@ -80,18 +81,20 @@ class PredictView(APIView):
 
         now = datetime.now(timezone.utc)
 
-        # Get or create lab
+        # Get or create lab (use default if not specified)
         lab = None
         if data.get('labId'):
-            lab = await Lab.objects.filter(code=data['labId']).afirst()
+            lab = Lab.objects.filter(code=data['labId']).first()
+        if not lab:
+            lab = Lab.objects.filter(is_active=True).first()
 
         # Get or create doctor
         doctor = None
         if data.get('doctorId'):
-            doctor = await Doctor.objects.filter(code=data['doctorId']).afirst()
+            doctor = Doctor.objects.filter(code=data['doctorId']).first()
 
         # Get or create patient with encrypted name
-        patient, _ = await Patient.objects.aupdate_or_create(
+        patient, _ = Patient.objects.update_or_create(
             patient_id=patient_id,
             defaults={
                 'name_encrypted': encrypt_field((data.get('patientName') or '').strip()),
@@ -116,7 +119,7 @@ class PredictView(APIView):
         ).hexdigest()
 
         # Create screening record
-        screening = await Screening.objects.acreate(
+        screening = Screening.objects.create(
             id=screening_id,
             patient=patient,
             lab=lab,
@@ -232,6 +235,14 @@ class ConsentRecordView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        # Get default lab (first active lab in the system)
+        default_lab = Lab.objects.filter(is_active=True).first()
+        if not default_lab:
+            return Response(
+                {'error': 'No active lab found in the system'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Get or create patient
         patient, _ = Patient.objects.get_or_create(
             patient_id=data['patientId'],
@@ -239,6 +250,7 @@ class ConsentRecordView(APIView):
                 'name_encrypted': '',
                 'age': 0,
                 'sex': 'M',
+                'lab': default_lab,
             }
         )
 

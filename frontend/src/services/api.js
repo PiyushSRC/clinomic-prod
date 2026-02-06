@@ -147,18 +147,15 @@ export const MFAService = {
 export const ConsentService = {
   getStatus: async (patientId) => {
     try {
-      const res = await API.get(`/consent/status/${patientId}`);
+      const res = await API.get(`/screening/consent/status/${patientId}`);
       return res.data;
     } catch (e) {
       return { hasConsent: false };
     }
   },
-  
+
   record: async (patientId, consentData) => {
-    const res = await API.post("/consent/record", {
-      patientId,
-      ...consentData,
-    });
+    const res = await API.post("/screening/consent/record", consentData);
     return res.data;
   },
 };

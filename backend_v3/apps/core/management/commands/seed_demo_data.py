@@ -78,7 +78,7 @@ class Command(BaseCommand):
             self.style.SUCCESS(
                 f"\nDemo data seeded successfully!\n"
                 f"  Organization: {org.name} (schema: {org.schema_name})\n"
-                f"  Domain: demo.localhost\n"
+                f"  Domains: demo.localhost, localhost\n"
                 f"  Users: admin_demo (admin), lab_demo (lab), doctor_demo (doctor)\n"
                 f"  Password: Demo@2024\n"
             )
@@ -143,6 +143,18 @@ class Command(BaseCommand):
             self.stdout.write(f"  Created domain: {domain.domain}")
         else:
             self.stdout.write(f"  Domain exists: {domain.domain}")
+
+        # Also add localhost for local development
+        localhost_domain, created = Domain.objects.get_or_create(
+            domain="localhost",
+            defaults={
+                "tenant": org,
+                "is_primary": False,
+            },
+        )
+
+        if created:
+            self.stdout.write(f"  Created domain: {localhost_domain.domain}")
 
         return org
 

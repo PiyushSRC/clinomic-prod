@@ -22,23 +22,36 @@ class SummaryView(APIView):
     Dashboard summary statistics.
 
     GET /api/analytics/summary
+    For DOCTOR role: returns only their own stats filtered by doctor email.
     """
     permission_classes = [IsAuthenticated, HasRole]
-    required_roles = [Role.ADMIN, Role.LAB]
+    required_roles = [Role.ADMIN, Role.LAB, Role.DOCTOR]
 
     def get(self, request):
+        # Base queryset
+        queryset = Screening.objects.all()
+
+        # For DOCTOR role, filter by their doctor record (matched by email)
+        if request.user.role == Role.DOCTOR and request.user.email:
+            doctor = Doctor.objects.filter(email=request.user.email, is_active=True).first()
+            if doctor:
+                queryset = queryset.filter(doctor=doctor)
+            else:
+                # No matching doctor record, return empty stats
+                queryset = Screening.objects.none()
+
         # Total counts
-        total_cases = Screening.objects.count()
-        normal_count = Screening.objects.filter(risk_class=1).count()
-        borderline_count = Screening.objects.filter(risk_class=2).count()
-        deficient_count = Screening.objects.filter(risk_class=3).count()
+        total_cases = queryset.count()
+        normal_count = queryset.filter(risk_class=1).count()
+        borderline_count = queryset.filter(risk_class=2).count()
+        deficient_count = queryset.filter(risk_class=3).count()
 
         # Daily tests (last 24 hours)
         since = datetime.now(timezone.utc) - timedelta(hours=24)
-        daily_tests = Screening.objects.filter(created_at__gte=since).count()
+        daily_tests = queryset.filter(created_at__gte=since).count()
 
         # Recent cases
-        recent_screenings = Screening.objects.select_related(
+        recent_screenings = queryset.select_related(
             'patient'
         ).order_by('-created_at')[:20]
 
@@ -147,7 +160,7 @@ class CaseStatsView(APIView):
     GET /api/analytics/cases?doctorId=D001&labId=LAB-001
     """
     permission_classes = [IsAuthenticated, HasRole]
-    required_roles = [Role.ADMIN, Role.LAB]
+    required_roles = [Role.ADMIN, Role.LAB, Role.DOCTOR]
 
     def get(self, request):
         doctor_id = request.query_params.get('doctorId')

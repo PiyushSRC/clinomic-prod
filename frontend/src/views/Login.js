@@ -1,10 +1,11 @@
 import React, { useState } from "react";
-import { Activity, Lock, User, FlaskConical, ArrowLeft, Mail, CheckCircle, Shield, Smartphone, Key } from "lucide-react";
+import { Lock, User, ArrowLeft, Mail, CheckCircle, Shield, Smartphone, Key, Eye, EyeOff } from "lucide-react";
 import { AuthService } from "@/services/api";
 
 const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [view, setView] = useState("login"); // login, forgot_password, mfa_challenge
   const [resetStatus, setResetStatus] = useState("idle");
 
@@ -68,6 +69,11 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
   const toggleView = () => {
     setView(view === "login" ? "forgot_password" : "login");
     setResetStatus("idle");
+  };
+
+  const fillDemoCredentials = (user, pass) => {
+    setUsername(user);
+    setPassword(pass);
   };
 
   // MFA Challenge View
@@ -140,9 +146,6 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
                   data-testid="use-backup-code-button"
                   type="button"
                   className="text-sm text-slate-500 hover:text-teal-600"
-                  onClick={() => {
-                    // Backup codes are 8 characters, allow longer input
-                  }}
                 >
                   <Key className="h-4 w-4 inline mr-1" />
                   Use a backup code instead
@@ -172,7 +175,7 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
           <img src="/logo.png" alt="Clinomic Labs Logo" className="h-20 w-auto" />
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-slate-900 tracking-tight">Clinomic Labs</h2>
-        <p className="mt-2 text-center text-sm text-slate-600">Pathology LIS & B12 Screening System</p>
+        <p className="mt-2 text-center text-sm text-slate-600">B12 Screening Platform v3.0</p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
@@ -181,7 +184,7 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
             <form className="space-y-6" onSubmit={handleSubmit}>
               <div>
                 <label htmlFor="username" className="block text-sm font-medium text-slate-700">
-                  Lab ID / Username
+                  Username
                 </label>
                 <div className="mt-1 relative rounded-md shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -195,8 +198,8 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
                     required
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="focus:ring-teal-500 focus:border-teal-500 block w-full pl-10 sm:text-sm border-slate-300 rounded-md py-2 border bg-white text-black"
-                    placeholder="lab"
+                    className="focus:ring-teal-500 focus:border-teal-500 block w-full pl-10 sm:text-sm border-slate-300 rounded-md py-2.5 border bg-white text-black"
+                    placeholder="Enter username"
                   />
                 </div>
               </div>
@@ -223,13 +226,24 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
                     data-testid="login-password-input"
                     id="password"
                     name="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="focus:ring-teal-500 focus:border-teal-500 block w-full pl-10 sm:text-sm border-slate-300 rounded-md py-2 border bg-white text-black"
-                    placeholder="lab"
+                    className="focus:ring-teal-500 focus:border-teal-500 block w-full pl-10 pr-10 sm:text-sm border-slate-300 rounded-md py-2.5 border bg-white text-black"
+                    placeholder="Enter password"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4 text-slate-400 hover:text-slate-600" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-slate-400 hover:text-slate-600" />
+                    )}
+                  </button>
                 </div>
               </div>
 
@@ -244,9 +258,9 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
                   data-testid="login-submit-button"
                   type="submit"
                   disabled={isLoading}
-                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-teal-700 hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-teal-700 hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {isLoading ? "Connecting..." : "Sign in"}
+                  {isLoading ? "Signing in..." : "Sign in"}
                 </button>
               </div>
             </form>
@@ -254,7 +268,7 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
             <div className="space-y-6">
               <div className="text-center">
                 <h3 className="text-lg font-medium text-slate-900">Account Recovery</h3>
-                <p className="mt-1 text-sm text-slate-500">Enter your Lab ID or registered email address. We'll send you instructions to reset your password.</p>
+                <p className="mt-1 text-sm text-slate-500">Enter your username or email to reset your password.</p>
               </div>
 
               {resetStatus === "success" ? (
@@ -266,21 +280,17 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
                     <div className="ml-3">
                       <h3 className="text-sm font-medium text-green-800">Recovery email sent</h3>
                       <div className="mt-2 text-sm text-green-700">
-                        <p>
-                          If an account exists for <b>{username}</b>, you will receive an email shortly.
-                        </p>
+                        <p>If an account exists for <b>{username}</b>, you will receive an email shortly.</p>
                       </div>
                       <div className="mt-4">
-                        <div className="-mx-2 -my-1.5 flex">
-                          <button
-                            data-testid="recovery-return-button"
-                            type="button"
-                            onClick={toggleView}
-                            className="bg-green-50 px-2 py-1.5 rounded-md text-sm font-medium text-green-800 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600"
-                          >
-                            Return to Sign In
-                          </button>
-                        </div>
+                        <button
+                          data-testid="recovery-return-button"
+                          type="button"
+                          onClick={toggleView}
+                          className="bg-green-50 px-2 py-1.5 rounded-md text-sm font-medium text-green-800 hover:bg-green-100"
+                        >
+                          Return to Sign In
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -289,7 +299,7 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
                 <form onSubmit={handleResetSubmit} className="space-y-4">
                   <div>
                     <label htmlFor="recovery-email" className="block text-sm font-medium text-slate-700">
-                      Lab ID / Email Address
+                      Username / Email
                     </label>
                     <div className="mt-1 relative rounded-md shadow-sm">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -304,7 +314,7 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         className="focus:ring-teal-500 focus:border-teal-500 block w-full pl-10 sm:text-sm border-slate-300 rounded-md py-2 border bg-white text-black"
-                        placeholder="lab@clinomic.com"
+                        placeholder="username or email"
                       />
                     </div>
                   </div>
@@ -323,43 +333,58 @@ const Login = ({ onLogin, onMFARequired, isLoading, error }) => {
               {resetStatus !== "success" && (
                 <div className="flex items-center justify-center">
                   <button data-testid="recovery-back-button" type="button" onClick={toggleView} className="flex items-center text-sm font-medium text-slate-600 hover:text-teal-600">
-                    <ArrowLeft className="h-4 h-4 mr-1" /> Back to Sign In
+                    <ArrowLeft className="h-4 w-4 mr-1" /> Back to Sign In
                   </button>
                 </div>
               )}
             </div>
           )}
 
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-300" />
+          {/* Demo Credentials - Clickable */}
+          {view === "login" && (
+            <div className="mt-6">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-300" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-slate-500">Demo Credentials</span>
+                </div>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-slate-500">Demo Credentials</span>
-              </div>
-            </div>
 
-            <div className="mt-4 grid grid-cols-3 gap-2 text-xs text-center text-slate-500" data-testid="demo-credentials">
-              <div className="bg-slate-50 p-2 rounded border border-slate-200">
-                <span className="font-bold block">Lab Tech</span>
-                lab / lab
+              <div className="mt-4 grid grid-cols-3 gap-2" data-testid="demo-credentials">
+                <button
+                  type="button"
+                  onClick={() => fillDemoCredentials("admin_demo", "Demo@2024")}
+                  className="bg-purple-50 hover:bg-purple-100 p-2.5 rounded-lg border border-purple-200 transition-colors text-center"
+                >
+                  <span className="font-semibold text-purple-700 block text-sm">Admin</span>
+                  <span className="text-purple-500 text-xs">admin_demo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fillDemoCredentials("lab_demo", "Demo@2024")}
+                  className="bg-teal-50 hover:bg-teal-100 p-2.5 rounded-lg border border-teal-200 transition-colors text-center"
+                >
+                  <span className="font-semibold text-teal-700 block text-sm">Lab Tech</span>
+                  <span className="text-teal-500 text-xs">lab_demo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fillDemoCredentials("doctor_demo", "Demo@2024")}
+                  className="bg-blue-50 hover:bg-blue-100 p-2.5 rounded-lg border border-blue-200 transition-colors text-center"
+                >
+                  <span className="font-semibold text-blue-700 block text-sm">Doctor</span>
+                  <span className="text-blue-500 text-xs">doctor_demo</span>
+                </button>
               </div>
-              <div className="bg-slate-50 p-2 rounded border border-slate-200">
-                <span className="font-bold block">Doctor</span>
-                doctor / doctor
-              </div>
-              <div className="bg-slate-50 p-2 rounded border border-slate-200">
-                <span className="font-bold block">Admin</span>
-                admin / admin
-              </div>
+              <p className="text-xs text-slate-400 text-center mt-2">Password: Demo@2024</p>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="mt-4 text-center text-xs text-slate-400">
-          <p>Clinomic B12 Screening Platform v2.0</p>
-          <p className="mt-1">HIPAA Compliant • FDA 21 CFR Part 11 Ready</p>
+          <p>HIPAA Compliant • FDA 21 CFR Part 11 Ready</p>
         </div>
       </div>
     </div>

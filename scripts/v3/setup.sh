@@ -21,18 +21,18 @@ echo "[1/5] Checking prerequisites..."
 
 # Docker
 if command -v docker &> /dev/null; then
-    echo "  Docker: $(docker --version | cut -d' ' -f3 | tr -d ',')"
+    echo "  ✓ Docker: $(docker --version | cut -d' ' -f3 | tr -d ',')"
 else
-    echo "  Docker: NOT FOUND"
+    echo "  ✗ Docker: NOT FOUND"
     echo "  Please install Docker from https://www.docker.com/get-started"
     exit 1
 fi
 
 # Docker Compose
 if docker compose version &> /dev/null; then
-    echo "  Docker Compose: $(docker compose version --short)"
+    echo "  ✓ Docker Compose: $(docker compose version --short)"
 else
-    echo "  Docker Compose: NOT FOUND"
+    echo "  ✗ Docker Compose: NOT FOUND"
     exit 1
 fi
 
@@ -81,14 +81,14 @@ for old, new in replacements.items():
 with open('.env.v3', 'w') as f:
     f.write(content)
 
-print('  Created .env.v3 with generated keys')
+print('  ✓ Created .env.v3 with generated keys')
 PYTHON
     else
-        echo "  ERROR: .env.v3.example not found"
+        echo "  ✗ ERROR: .env.v3.example not found"
         exit 1
     fi
 else
-    echo "  .env.v3 already exists"
+    echo "  ✓ .env.v3 already exists"
 fi
 
 # Step 3: Create ML models directory
@@ -98,19 +98,19 @@ echo "[3/5] Setting up ML models directory..."
 mkdir -p backend_v3/ml/models
 
 if [ "$(ls -A backend_v3/ml/models 2>/dev/null)" ]; then
-    echo "  ML models found"
+    echo "  ✓ ML models found"
 else
-    echo "  ML models directory created"
-    echo "  NOTE: Place model files in backend_v3/ml/models/ for screening to work"
+    echo "  ✓ ML models directory created"
+    echo "    NOTE: Place model files in backend_v3/ml/models/ for screening to work"
 fi
 
 # Step 4: Build Docker images
 echo ""
 echo "[4/5] Building Docker images..."
 
-docker compose -f docker-compose.v3.yml build
+docker compose -f docker-compose.v3.yml --profile dev build
 
-echo "  Docker images built"
+echo "  ✓ Docker images built"
 
 # Step 5: Initialize database
 echo ""
@@ -124,11 +124,11 @@ sleep 5
 # Check if database is ready
 for i in {1..30}; do
     if docker compose -f docker-compose.v3.yml exec -T db pg_isready -U postgres > /dev/null 2>&1; then
-        echo "  Database is ready"
+        echo "  ✓ Database is ready"
         break
     fi
     if [ $i -eq 30 ]; then
-        echo "  ERROR: Database failed to start"
+        echo "  ✗ ERROR: Database failed to start"
         exit 1
     fi
     sleep 1
@@ -144,7 +144,7 @@ docker compose -f docker-compose.v3.yml --profile dev run --rm backend_v3_dev py
 # Stop services
 docker compose -f docker-compose.v3.yml --profile dev down
 
-echo "  Database initialized"
+echo "  ✓ Database initialized"
 
 # Summary
 echo ""
@@ -152,19 +152,14 @@ echo "=========================================="
 echo "Setup Complete!"
 echo "=========================================="
 echo ""
-echo "Environment file: .env.v3"
-echo ""
 echo "To start the platform:"
 echo ""
-echo "  Development:"
-echo "    ./scripts/v3/start.sh dev"
+echo "  ./scripts/v3/start.sh dev"
 echo ""
-echo "  Production:"
-echo "    ./scripts/v3/start.sh prod"
-echo ""
-echo "URLs:"
-echo "  Backend API: http://localhost:8000"
-echo "  Frontend:    http://localhost:3000"
+echo "This will start all services:"
+echo "  - PostgreSQL (localhost:5433)"
+echo "  - Backend API (localhost:8000)"
+echo "  - Frontend (localhost:3000)"
 echo ""
 echo "Demo credentials:"
 echo "  admin_demo / Demo@2024"
