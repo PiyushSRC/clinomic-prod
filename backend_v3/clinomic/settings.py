@@ -30,12 +30,14 @@ SHARED_APPS = [
     'django_tenants',
     'django.contrib.contenttypes',
     'django.contrib.auth',
+    'django.contrib.admin',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
     # Third party shared
     'rest_framework',
     'corsheaders',
+    'django_filters',
     'auditlog',
     # Our shared apps
     'apps.core',
