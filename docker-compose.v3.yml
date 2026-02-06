@@ -4,10 +4,8 @@ services:
   db:
     image: postgres:15-alpine
     restart: always
-    environment:
-      POSTGRES_DB: clinomic
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    env_file:
+      - .env.v3
     volumes:
       - postgres_v3_data:/var/lib/postgresql/data
     ports:
@@ -22,20 +20,13 @@ services:
     build:
       context: ./backend_v3
       dockerfile: Dockerfile
+    env_file:
+      - .env.v3
     environment:
       - DEBUG=False
-      - APP_ENV=${APP_ENV:-dev}
-      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+      - APP_ENV=production
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
-      - POSTGRES_DB=clinomic
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - JWT_REFRESH_SECRET_KEY=${JWT_REFRESH_SECRET_KEY}
-      - MASTER_ENCRYPTION_KEY=${MASTER_ENCRYPTION_KEY}
-      - AUDIT_SIGNING_KEY=${AUDIT_SIGNING_KEY}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
     ports:
       - "8000:8000"
     depends_on:
@@ -55,20 +46,13 @@ services:
       context: ./backend_v3
       dockerfile: Dockerfile
     command: python manage.py runserver 0.0.0.0:8000
+    env_file:
+      - .env.v3
     environment:
       - DEBUG=True
       - APP_ENV=dev
-      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-dev-secret-key-change-in-production}
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
-      - POSTGRES_DB=clinomic
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-change-in-production}
-      - JWT_REFRESH_SECRET_KEY=${JWT_REFRESH_SECRET_KEY:-dev-refresh-secret}
-      - MASTER_ENCRYPTION_KEY=${MASTER_ENCRYPTION_KEY}
-      - AUDIT_SIGNING_KEY=${AUDIT_SIGNING_KEY:-dev-audit-key}
-      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
     ports:
       - "8000:8000"
     depends_on:
@@ -85,8 +69,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    environment:
-      - VITE_API_URL=http://localhost:8000
+    env_file:
+      - .env.v3
     ports:
       - "3000:3000"
     depends_on:
