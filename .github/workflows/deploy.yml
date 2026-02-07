@@ -74,19 +74,19 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          
+
           # Use the private key from secrets (preserve exact formatting)
           cat > ~/.ssh/deploy_key << 'EOF'
           ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           EOF
           chmod 600 ~/.ssh/deploy_key
-          
+
           # Validate key format
           ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2>&1 || (echo "ERROR: Invalid SSH private key format. Please verify VPS_SSH_PRIVATE_KEY secret contains a valid OpenSSH private key." && exit 1)
-          
+
           # Scan host keys
           ssh-keyscan -H ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
-          
+
           # Create SSH config
           cat > ~/.ssh/config << EOF
           Host production
@@ -125,6 +125,14 @@ jobs:
         run: |
           ssh production "cd ${{ env.DEPLOY_PATH }} && docker compose -f docker-compose.prod.yml up -d --remove-orphans"
 
+      - name: Run Migrations
+        run: |
+          echo "Running shared schemas migrations..."
+          ssh production "cd ${{ env.DEPLOY_PATH }} && docker compose -f docker-compose.prod.yml exec -T backend_v3 python manage.py migrate_schemas --shared"
+
+          echo "Running tenant migrations..."
+          ssh production "cd ${{ env.DEPLOY_PATH }} && docker compose -f docker-compose.prod.yml exec -T backend_v3 python manage.py migrate_schemas --tenant"
+
       - name: Reload Nginx
         run: |
           ssh production "docker exec clinomic-nginx nginx -s reload" || true
@@ -133,7 +141,7 @@ jobs:
         run: |
           echo "Waiting for application to become healthy via HTTPS..."
           sleep 10  # Allow time for services to stabilize
-          
+
           for i in $(seq 1 20); do
             HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 ${{ env.HEALTH_URL }} || echo "000")
             if [ "$HTTP_CODE" = "200" ]; then
@@ -143,7 +151,7 @@ jobs:
             echo "Attempt $i/20: HTTP $HTTP_CODE - waiting 5s..."
             sleep 5
           done
-          
+
           echo "❌ Application health check failed after 20 attempts"
           echo "Debug info:"
           curl -v ${{ env.HEALTH_URL }} || true
