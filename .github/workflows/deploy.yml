@@ -104,10 +104,14 @@ jobs:
         run: |
           ssh production "echo 'SSH connection successful'"
 
+      - name: Create Env File
+        run: |
+          echo "${{ secrets.ENV_FILE_V3 }}" > .env.v3
+
       - name: Sync Configuration Files
         run: |
-          # Sync docker-compose and nginx config to VPS
-          scp docker-compose.prod.yml production:${{ env.DEPLOY_PATH }}/
+          # Sync docker-compose, env file, and nginx config to VPS
+          scp docker-compose.prod.yml .env.v3 production:${{ env.DEPLOY_PATH }}/
           scp -r nginx production:${{ env.DEPLOY_PATH }}/
           scp init-letsencrypt.sh production:${{ env.DEPLOY_PATH }}/
 
@@ -128,7 +132,7 @@ jobs:
 
       - name: Restart Stack
         run: |
-          ssh production "cd ${{ env.DEPLOY_PATH }} && docker compose -f docker-compose.prod.yml up -d --remove-orphans"
+          ssh production "cd ${{ env.DEPLOY_PATH }} && docker compose -f docker-compose.prod.yml --profile prod --profile prod-nginx up -d --remove-orphans"
 
       - name: Run Migrations
         run: |
