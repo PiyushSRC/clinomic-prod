@@ -36,7 +36,7 @@ echo
 
 
 echo "### Starting nginx ..."
-docker compose -f docker-compose.prod.yml up --force-recreate -d nginx
+docker compose -f docker-compose.prod.yml --profile prod-nginx up --force-recreate -d nginx
 echo
 
 

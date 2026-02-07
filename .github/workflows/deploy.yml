@@ -137,10 +137,10 @@ jobs:
       - name: Run Migrations
         run: |
           echo "Running shared schemas migrations..."
-          ssh production "cd ${{ env.DEPLOY_PATH }} && docker compose -f docker-compose.prod.yml exec -T backend python manage.py migrate_schemas --shared"
+          ssh production "cd ${{ env.DEPLOY_PATH }} && docker compose -f docker-compose.prod.yml exec -T backend_v3 python manage.py migrate_schemas --shared"
 
           echo "Running tenant migrations..."
-          ssh production "cd ${{ env.DEPLOY_PATH }} && docker compose -f docker-compose.prod.yml exec -T backend python manage.py migrate_schemas --tenant"
+          ssh production "cd ${{ env.DEPLOY_PATH }} && docker compose -f docker-compose.prod.yml exec -T backend_v3 python manage.py migrate_schemas --tenant"
 
       - name: Reload Nginx
         run: |
