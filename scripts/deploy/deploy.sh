@@ -46,6 +46,7 @@ for arg in "$@"; do
             ;;
     esac
 done
+export TAG
 
 # Functions
 log() {
@@ -91,7 +92,7 @@ rollback() {
         cp "${COMPOSE_FILE}.backup" "$COMPOSE_FILE"
     fi
     
-    docker-compose -f "$COMPOSE_FILE" up -d --force-recreate backend frontend
+    docker-compose -f "$COMPOSE_FILE" up -d --force-recreate backend_v3 frontend
     
     log "ROLLBACK | Rollback complete"
 }
@@ -135,15 +136,15 @@ main() {
     if [ "$SKIP_PULL" != true ]; then
         log "Step 3: Pulling new images..."
         if [ "$DRY_RUN" != true ]; then
-            docker pull "clinomic-backend:$TAG" || docker pull "ghcr.io/dev-abiox/clinomic-prod/backend:$TAG"
-            docker pull "clinomic-frontend:$TAG" || docker pull "ghcr.io/dev-abiox/clinomic-prod/frontend:$TAG"
+            docker pull "ghcr.io/dev-abiox/clinomic-prod/backend:$TAG"
+            docker pull "ghcr.io/dev-abiox/clinomic-prod/frontend:$TAG"
         fi
     fi
     
     # Step 4: Update backend (rolling)
     log "Step 4: Updating backend..."
     if [ "$DRY_RUN" != true ]; then
-        docker-compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate backend
+        docker-compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate backend_v3
     fi
     
     # Step 5: Wait for backend health

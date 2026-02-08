@@ -16,6 +16,7 @@ services:
 
   # Production backend with gunicorn
   backend_v3:
+    image: ghcr.io/dev-abiox/clinomic-prod/backend:${TAG:-latest}
     build:
       context: ./backend_v3
       dockerfile: Dockerfile
@@ -88,6 +89,7 @@ services:
 
   # Production frontend with nginx
   frontend:
+    image: ghcr.io/dev-abiox/clinomic-prod/frontend:${TAG:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile
