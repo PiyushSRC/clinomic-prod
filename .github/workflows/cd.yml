@@ -26,6 +26,10 @@ jobs:
 
             - name: Set Environment Variables
               run: |
+                  # Downcase IMAGE_NAME for Docker compatibility
+                  IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+                  echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+
                   if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
                     echo "ENV_NAME=prod" >> $GITHUB_ENV
                     echo "REACT_URL=https://api.clinomiclabs.com" >> $GITHUB_ENV
