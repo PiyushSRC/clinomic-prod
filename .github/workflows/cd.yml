@@ -74,6 +74,8 @@ jobs:
             - name: Deploy via SSH
               # 1) Pin SSH Action Version (Important)
               uses: appleboy/ssh-action@v1.0.3
+              env:
+                GHCR_PAT: ${{ secrets.GHCR_PAT }}
               with:
                   host: ${{ env.SSH_HOST }}
                   username: ${{ env.SSH_USER }}
