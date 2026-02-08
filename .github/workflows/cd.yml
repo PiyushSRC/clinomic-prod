@@ -31,13 +31,17 @@ jobs:
                     echo "REACT_URL=https://api.clinomiclabs.com" >> $GITHUB_ENV
                     echo "SSH_HOST=${{ secrets.SSH_HOST_PROD }}" >> $GITHUB_ENV
                     echo "SSH_USER=${{ secrets.SSH_USER_PROD }}" >> $GITHUB_ENV
-                    echo "SSH_KEY=${{ secrets.SSH_PRIVATE_KEY_PROD }}" >> $GITHUB_ENV
+                    echo "SSH_KEY<<EOF" >> $GITHUB_ENV
+                    echo "${{ secrets.SSH_PRIVATE_KEY_PROD }}" >> $GITHUB_ENV
+                    echo "EOF" >> $GITHUB_ENV
                   else
                     echo "ENV_NAME=staging" >> $GITHUB_ENV
                     echo "REACT_URL=https://api.testing.clinomiclabs.com" >> $GITHUB_ENV
                     echo "SSH_HOST=${{ secrets.SSH_HOST_STAGING }}" >> $GITHUB_ENV
                     echo "SSH_USER=${{ secrets.SSH_USER_STAGING }}" >> $GITHUB_ENV
-                    echo "SSH_KEY=${{ secrets.SSH_PRIVATE_KEY_STAGING }}" >> $GITHUB_ENV
+                    echo "SSH_KEY<<EOF" >> $GITHUB_ENV
+                    echo "${{ secrets.SSH_PRIVATE_KEY_STAGING }}" >> $GITHUB_ENV
+                    echo "EOF" >> $GITHUB_ENV
                   fi
 
             - name: Log in to the Container registry

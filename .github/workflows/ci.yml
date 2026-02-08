@@ -57,7 +57,7 @@ jobs:
 
             - name: Run Bandit Security Scan
               # Scanning strictly for High severity issues
-              run: bandit -r . -c pyproject.toml --severity high --exit-zero 2>/dev/null
+              run: bandit -r . --severity high --exit-zero
 
             - name: Run Dependency Vulnerability Scan (Safety)
               run: safety check
