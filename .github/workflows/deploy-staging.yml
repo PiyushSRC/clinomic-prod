@@ -1,83 +1,82 @@
 name: Deploy Staging
 
 on:
-    push:
-        branches:
-            - develop
+  push:
+    branches:
+      - develop
+      - v3-clean
 
-# ✅ REQUIRED for GHCR push
 permissions:
-    contents: read
-    packages: write
+  contents: read
+  packages: write
 
 env:
-    REGISTRY: ghcr.io
-    BACKEND_IMAGE: ghcr.io/dev-abiox/production-ready/backend
-    FRONTEND_IMAGE: ghcr.io/dev-abiox/production-ready/frontend
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ghcr.io/dev-abiox/production-ready/backend
+  FRONTEND_IMAGE: ghcr.io/dev-abiox/production-ready/frontend
 
 jobs:
-    deploy-staging:
-        runs-on: ubuntu-latest
+  deploy-staging:
+    runs-on: ubuntu-latest
 
-        steps:
-            # ---------------------------
-            # Checkout code
-            # ---------------------------
-            - name: Checkout repo
-              uses: actions/checkout@v4
+    steps:
+      # ---------------------------
+      # Checkout
+      # ---------------------------
+      - uses: actions/checkout@v4
 
-            # ---------------------------
-            # Login to GHCR
-            # ---------------------------
-            - name: Login to GHCR
-              run: |
-                  echo "${{ secrets.GITHUB_TOKEN }}" | \
-                  docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      # ---------------------------
+      # Login GHCR
+      # ---------------------------
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+          | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            # ---------------------------
-            # Build & Push Backend
-            # ---------------------------
-            - name: Build & Push Backend (staging)
-              run: |
-                  docker build \
-                    -t $BACKEND_IMAGE:staging \
-                    ./backend
+      # ---------------------------
+      # Build & Push Backend (v3)
+      # ---------------------------
+      - name: Build & Push Backend
+        run: |
+          docker build \
+            -t $BACKEND_IMAGE:staging \
+            ./backend_v3
 
-                  docker push $BACKEND_IMAGE:staging
+          docker push $BACKEND_IMAGE:staging
 
-            # ---------------------------
-            # Build & Push Frontend
-            # ---------------------------
-            - name: Build & Push Frontend (staging)
-              run: |
-                  docker build \
-                    -t $FRONTEND_IMAGE:staging \
-                    ./frontend
+      # ---------------------------
+      # Build & Push Frontend
+      # ---------------------------
+      - name: Build & Push Frontend
+        run: |
+          docker build \
+            -t $FRONTEND_IMAGE:staging \
+            ./frontend
 
-                  docker push $FRONTEND_IMAGE:staging
+          docker push $FRONTEND_IMAGE:staging
 
-            # ---------------------------
-            # Deploy to VPS (staging only)
-            # ---------------------------
-            - name: Deploy to VPS
-              uses: appleboy/ssh-action@v1.0.3
-              with:
-                  host: ${{ secrets.VPS_HOST }}
-                  username: ${{ secrets.VPS_USER }}
-                  key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-                  script: |
-                      set -e
+      # ---------------------------
+      # Deploy to VPS
+      # ---------------------------
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          script: |
+            set -e
 
-                      cd /opt/clinomic
+            cd /opt/clinomic
 
-                      echo "Pulling staging images..."
-                      docker pull $BACKEND_IMAGE:staging
-                      docker pull $FRONTEND_IMAGE:staging
+            echo "Pull latest images..."
+            docker pull $BACKEND_IMAGE:staging
+            docker pull $FRONTEND_IMAGE:staging
 
-                      echo "Restarting staging containers..."
-                      docker compose -f docker-compose.prod.yml up -d backend-staging frontend-staging
+            echo "Restart containers..."
+            docker compose -f docker-compose.v3.yml --profile dev up -d
 
-                      echo "Cleaning old images..."
-                      docker image prune -f
+            echo "Cleanup old images..."
+            docker image prune -f
 
-                      echo "Staging deployment complete."
+            echo "Staging deployment complete."

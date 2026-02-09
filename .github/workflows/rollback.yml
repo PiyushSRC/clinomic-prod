@@ -1,22 +1,12 @@
-# ============================================================================
-# Manual Rollback Workflow
-# ============================================================================
-# Use this to quickly rollback to a previous deployment
-# ============================================================================
-
 name: Rollback Production
 
 on:
   workflow_dispatch:
     inputs:
       rollback_target:
-        description: 'Rollback target (previous, or specific sha like sha-abc1234)'
+        description: "Tag to rollback to (e.g. sha-abc1234 or 'previous')"
         required: true
-        default: 'previous'
-      reason:
-        description: 'Reason for rollback'
-        required: true
-        default: 'Production issue'
+        default: "previous"
 
 env:
   VPS_HOST: 66.116.225.67
@@ -27,142 +17,54 @@ env:
 
 jobs:
   rollback:
-    name: Rollback Deployment
     runs-on: ubuntu-latest
     environment: production
-    
-    steps:
-      - name: Validate inputs
-        run: |
-          echo "Rollback Target: ${{ github.event.inputs.rollback_target }}"
-          echo "Reason: ${{ github.event.inputs.reason }}"
-          echo "Initiated by: ${{ github.actor }}"
-          echo "Timestamp: $(date -Iseconds)"
 
-      - name: Setup SSH Key
+    steps:
+      - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          
-          # Use the private key from secrets (preserve exact formatting)
+
           cat > ~/.ssh/deploy_key << 'EOF'
           ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           EOF
           chmod 600 ~/.ssh/deploy_key
-          
-          # Validate key format
-          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2>&1 || (echo "ERROR: Invalid SSH private key format. Please verify VPS_SSH_PRIVATE_KEY secret contains a valid OpenSSH private key." && exit 1)
+
           ssh-keyscan -H ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
-          
-          cat > ~/.ssh/config << EOF
-          Host production
-            HostName ${{ env.VPS_HOST }}
-            User ${{ env.VPS_USER }}
-            IdentityFile ~/.ssh/deploy_key
-            StrictHostKeyChecking accept-new
-            HostKeyAlgorithms +ssh-rsa
-            PubkeyAcceptedAlgorithms +ssh-rsa
-          EOF
-          chmod 600 ~/.ssh/config
 
-      - name: Execute Rollback
+      - name: Execute rollback
         run: |
-          ssh production << 'ROLLBACK_SCRIPT'
+          ssh -i ~/.ssh/deploy_key ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
             set -e
-            
-            ROLLBACK_TARGET="${{ github.event.inputs.rollback_target }}"
-            REASON="${{ github.event.inputs.reason }}"
-            ACTOR="${{ github.actor }}"
-            
-            echo "=========================================="
-            echo "CLINOMIC PRODUCTION ROLLBACK"
-            echo "=========================================="
-            echo "Target: $ROLLBACK_TARGET"
-            echo "Reason: $REASON"
-            echo "Initiated by: $ACTOR"
-            echo "Timestamp: $(date -Iseconds)"
-            echo ""
-            
-            cd ${{ env.DEPLOY_PATH }}
-            
-            if [ "$ROLLBACK_TARGET" == "previous" ]; then
-              echo "Rolling back to previous deployment..."
-              
-              if [ -f .last_deploy_images ]; then
-                echo "Found previous images:"
-                cat .last_deploy_images
-                
-                # Restore previous images
-                while IFS= read -r image; do
-                  echo "Restoring: $image"
-                  SERVICE=$(echo $image | grep -o 'backend\|frontend')
-                  docker tag "$image" "clinomic-$SERVICE:latest" || true
-                done < .last_deploy_images
-              else
-                echo "ERROR: No previous deployment record found!"
-                exit 1
-              fi
-              
-            else
-              # Specific version rollback
-              echo "Rolling back to specific tag: $ROLLBACK_TARGET"
-              
-              TAG="$ROLLBACK_TARGET"
-              
-              echo "Pulling specific versions..."
-              docker pull ${{ env.BACKEND_IMAGE }}:$TAG
-              docker pull ${{ env.FRONTEND_IMAGE }}:$TAG
-              
-              docker tag ${{ env.BACKEND_IMAGE }}:$TAG clinomic-backend:latest
-              docker tag ${{ env.FRONTEND_IMAGE }}:$TAG clinomic-frontend:latest
+            cd /opt/clinomic
+
+            TAG="${{ github.event.inputs.rollback_target }}"
+
+            if [ "$TAG" = "previous" ]; then
+              echo "Using previous images..."
+              docker compose -f docker-compose.v3.yml up -d
+              exit 0
             fi
-            
-            echo ""
-            echo "Restarting services..."
-            docker compose -f docker-compose.prod.yml up -d --force-recreate backend frontend
-            
-            echo ""
-            echo "Waiting for health check..."
-            for i in {1..30}; do
-              if curl -sf http://localhost:8001/api/health/ready > /dev/null 2>&1; then
-                echo "✓ Health check passed after $i seconds"
-                break
-              fi
-              if [ $i -eq 30 ]; then
-                echo "✗ Health check failed after 30 seconds"
-                exit 1
-              fi
-              sleep 1
-            done
-            
-            # Reload nginx
-            docker exec nginx nginx -s reload 2>/dev/null || sudo nginx -s reload 2>/dev/null || true
-            
-            # Log rollback
-            echo "$(date -Iseconds) | ROLLBACK | $ROLLBACK_TARGET | $REASON | $ACTOR" >> /var/log/clinomic-deploys.log
-            
-            echo ""
-            echo "=========================================="
-            echo "ROLLBACK COMPLETE"
-            echo "=========================================="
-          ROLLBACK_SCRIPT
 
-      - name: Verify rollback
-        run: |
-          echo "Verifying rollback..."
-          sleep 5
-          
-          curl -sf "https://clinomiclabs.com/api/health/ready" | jq . || echo "Verification failed"
-          
-          echo ""
-          echo "Rollback verification complete."
+            echo "Rolling back to $TAG"
 
-      - name: Create rollback record
+            docker pull ghcr.io/dev-abiox/production-ready/backend:$TAG
+            docker pull ghcr.io/dev-abiox/production-ready/frontend:$TAG
+
+            docker tag ghcr.io/dev-abiox/production-ready/backend:$TAG ghcr.io/dev-abiox/production-ready/backend:latest
+            docker tag ghcr.io/dev-abiox/production-ready/frontend:$TAG ghcr.io/dev-abiox/production-ready/frontend:latest
+
+            docker compose -f docker-compose.v3.yml up -d --force-recreate
+          EOF
+
+      - name: Health Check
         run: |
-          echo "## 🔄 Rollback Executed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Target | ${{ github.event.inputs.rollback_target }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Reason | ${{ github.event.inputs.reason }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Initiated by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Timestamp | $(date -Iseconds) |" >> $GITHUB_STEP_SUMMARY
+          for i in {1..20}; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" https://clinomiclabs.com/api/health/ready || true)
+            if [ "$code" = "200" ]; then
+              echo "Rollback healthy"
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1

@@ -15,6 +15,10 @@ env:
   HEALTH_URL: https://clinomiclabs.com/api/health/ready
 
 jobs:
+  #################################
+  # BUILD & PUSH
+  #################################
+
   build:
     runs-on: ubuntu-latest
     permissions:
@@ -24,30 +28,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Login to GHCR
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract commit SHA
-        id: meta
+      - id: meta
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
+      # ✅ FIXED: backend_v3
       - name: Build & Push Backend
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
+          context: ./backend_v3
           push: true
           tags: |
             ${{ env.BACKEND_IMAGE }}:latest
             ${{ env.BACKEND_IMAGE }}:${{ steps.meta.outputs.sha_short }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Build & Push Frontend
         uses: docker/build-push-action@v5
@@ -59,8 +59,10 @@ jobs:
             ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.sha_short }}
           build-args: |
             REACT_APP_BACKEND_URL=https://clinomiclabs.com
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+
+  #################################
+  # DEPLOY
+  #################################
 
   deploy:
     runs-on: ubuntu-latest
@@ -74,84 +76,41 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          
-          # Use the private key from secrets (preserve exact formatting)
+
           cat > ~/.ssh/deploy_key << 'EOF'
           ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           EOF
           chmod 600 ~/.ssh/deploy_key
-          
-          # Validate key format
-          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2>&1 || (echo "ERROR: Invalid SSH private key format. Please verify VPS_SSH_PRIVATE_KEY secret contains a valid OpenSSH private key." && exit 1)
-          
-          # Scan host keys
+
           ssh-keyscan -H ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
-          
-          # Create SSH config
-          cat > ~/.ssh/config << EOF
-          Host production
-            HostName ${{ env.VPS_HOST }}
-            User ${{ env.VPS_USER }}
-            IdentityFile ~/.ssh/deploy_key
-            StrictHostKeyChecking accept-new
-            HostKeyAlgorithms +ssh-rsa
-            PubkeyAcceptedAlgorithms +ssh-rsa
-            ServerAliveInterval 60
+
+      - name: Deploy on VPS
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
+            set -e
+            cd /opt/clinomic
+
+            echo "Login GHCR"
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            echo "Pull latest images"
+            docker pull $BACKEND_IMAGE:latest
+            docker pull $FRONTEND_IMAGE:latest
+
+            echo "Restart stack"
+            docker compose -f docker-compose.v3.yml up -d --remove-orphans
+
+            docker image prune -f
           EOF
-          chmod 600 ~/.ssh/config
 
-      - name: Test SSH Connection
+      - name: Health Check
         run: |
-          ssh production "echo 'SSH connection successful'"
-
-      - name: Sync Configuration Files
-        run: |
-          # Sync docker-compose and nginx config to VPS
-          scp docker-compose.prod.yml production:${{ env.DEPLOY_PATH }}/
-          scp -r nginx production:${{ env.DEPLOY_PATH }}/
-
-      - name: Docker Login on VPS
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_USER: ${{ github.actor }}
-        run: |
-          ssh production "echo '${GHCR_TOKEN}' | docker login ghcr.io -u '${GHCR_USER}' --password-stdin"
-
-      - name: Pull Images
-        run: |
-          ssh production "docker pull ${{ env.BACKEND_IMAGE }}:latest && docker pull ${{ env.FRONTEND_IMAGE }}:latest"
-
-      - name: Restart Stack
-        run: |
-          ssh production "cd ${{ env.DEPLOY_PATH }} && docker compose -f docker-compose.prod.yml up -d --remove-orphans"
-
-      - name: Reload Nginx
-        run: |
-          ssh production "docker exec clinomic-nginx nginx -s reload" || true
-
-      - name: Wait for Application Health
-        run: |
-          echo "Waiting for application to become healthy via HTTPS..."
-          sleep 10  # Allow time for services to stabilize
-          
-          for i in $(seq 1 20); do
-            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 ${{ env.HEALTH_URL }} || echo "000")
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ Application healthy after attempt $i"
+          for i in {1..20}; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" ${{ env.HEALTH_URL }} || true)
+            if [ "$code" = "200" ]; then
+              echo "Healthy"
               exit 0
             fi
-            echo "Attempt $i/20: HTTP $HTTP_CODE - waiting 5s..."
             sleep 5
           done
-          
-          echo "❌ Application health check failed after 20 attempts"
-          echo "Debug info:"
-          curl -v ${{ env.HEALTH_URL }} || true
           exit 1
-
-      - name: Deployment Complete
-        run: |
-          echo "🎉 Deployment successful!"
-          echo "Backend: ${{ env.BACKEND_IMAGE }}:latest"
-          echo "Frontend: ${{ env.FRONTEND_IMAGE }}:latest"
-          echo "Health: ${{ env.HEALTH_URL }}"
