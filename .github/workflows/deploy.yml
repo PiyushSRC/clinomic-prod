@@ -90,7 +90,9 @@ jobs:
           host: ${{ secrets.SSH_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_PRIVATE_KEY_PROD }}
+          port: 22
           script: |
+            set -e
             cd /opt/clinomic
 
             echo "Pull latest images..."

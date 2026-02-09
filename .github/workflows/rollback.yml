@@ -21,20 +21,14 @@ jobs:
     environment: production
 
     steps:
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-
-          cat > ~/.ssh/deploy_key << 'EOF'
-          ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          EOF
-          chmod 600 ~/.ssh/deploy_key
-
-          ssh-keyscan -H ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
-
       - name: Execute rollback
-        run: |
-          ssh -i ~/.ssh/deploy_key ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST_PROD }}
+          username: ${{ secrets.SSH_USER_PROD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_PROD }}
+          port: 22
+          script: |
             set -e
             cd /opt/clinomic
 
@@ -55,7 +49,6 @@ jobs:
             docker tag ghcr.io/dev-abiox/production-ready/frontend:$TAG ghcr.io/dev-abiox/production-ready/frontend:latest
 
             docker compose -f docker-compose.v3.yml up -d --force-recreate
-          EOF
 
       - name: Health Check
         run: |
