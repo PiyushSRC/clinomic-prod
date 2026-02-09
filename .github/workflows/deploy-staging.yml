@@ -70,8 +70,8 @@ jobs:
             cd /opt/clinomic
 
             echo "Pull latest images..."
-            docker pull $BACKEND_IMAGE:staging
-            docker pull $FRONTEND_IMAGE:staging
+            docker pull ghcr.io/dev-abiox/production-ready/backend:staging
+            docker pull ghcr.io/dev-abiox/production-ready/frontend:staging
 
             echo "Restart containers..."
             docker compose -f docker-compose.v3.yml --profile dev up -d

@@ -96,8 +96,8 @@ jobs:
             cd /opt/clinomic
 
             echo "Pull latest images..."
-            docker pull $BACKEND_IMAGE:latest
-            docker pull $FRONTEND_IMAGE:latest
+            docker pull ghcr.io/dev-abiox/production-ready/backend:latest
+            docker pull ghcr.io/dev-abiox/production-ready/frontend:latest
 
             echo "Restart containers..."
             docker compose -f docker-compose.v3.yml up -d --remove-orphans
