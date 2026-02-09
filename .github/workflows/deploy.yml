@@ -84,24 +84,23 @@ jobs:
 
           ssh-keyscan -H ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy on VPS
-        run: |
-          ssh -i ~/.ssh/deploy_key ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
-            set -e
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST_PROD }}
+          username: ${{ secrets.SSH_USER_PROD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_PROD }}
+          script: |
             cd /opt/clinomic
 
-            echo "Login GHCR"
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-            echo "Pull latest images"
+            echo "Pull latest images..."
             docker pull $BACKEND_IMAGE:latest
             docker pull $FRONTEND_IMAGE:latest
 
-            echo "Restart stack"
+            echo "Restart containers..."
             docker compose -f docker-compose.v3.yml up -d --remove-orphans
 
             docker image prune -f
-          EOF
 
       - name: Health Check
         run: |
